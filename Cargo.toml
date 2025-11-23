@@ -1,0 +1,15 @@
+[package]
+name = "soma_media"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+thiserror = "1"
+rustfft = "6"  # For mel spectrogram generation
+ndarray = "0.15"  # Array operations for spectrograms
+image = "0.25"  # Image loading for video frames
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3"
