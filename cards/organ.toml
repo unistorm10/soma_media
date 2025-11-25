@@ -1,0 +1,95 @@
+# soma_media Organ Capability Card
+# MCP-compliant organ descriptor for media preprocessing capabilities
+
+[organ]
+name = "soma_media"
+version = "0.1.0"
+description = "FFmpeg-based audio/video preprocessing organ for media feature extraction and format conversion"
+division = "media"
+subsystem = "preprocessing"
+tags = ["media", "audio", "video", "ffmpeg", "preprocessing", "spectrogram", "frames"]
+author = "SOMA Media Team"
+
+# Audio preprocessing function
+[[functions]]
+name = "audio.preprocess"
+description = "Preprocess audio file to specified format with sample rate and channel configuration via FFmpeg"
+tags = ["audio", "preprocessing", "conversion"]
+examples = [
+    "Convert MP3 to WAV at 48kHz mono for CLAP embedding",
+    "Normalize audio format for model input",
+    "Resample audio to target sample rate"
+]
+idempotent = true
+side_effects = ["writes audio file", "invokes ffmpeg"]
+
+[functions.input_schema]
+type = "object"
+required = ["input_path", "output_path"]
+
+[functions.input_schema.properties.input_path]
+type = "string"
+description = "Path to input audio file"
+
+[functions.input_schema.properties.output_path]
+type = "string"
+description = "Path to output audio file"
+
+[functions.input_schema.properties.sample_rate]
+type = "integer"
+description = "Target sample rate (default: 48000)"
+
+[functions.input_schema.properties.channels]
+type = "integer"
+description = "Number of channels (default: 1)"
+
+[functions.output_schema]
+type = "object"
+
+[functions.output_schema.properties.processed]
+type = "boolean"
+
+[functions.output_schema.properties.output_path]
+type = "string"
+
+[functions.output_schema.properties.sample_rate]
+type = "integer"
+
+[functions.output_schema.properties.channels]
+type = "integer"
+
+# Mel spectrogram generation function
+[[functions]]
+name = "audio.mel_spectrogram"
+description = "Generate mel-scale spectrogram from audio file for audio model input (e.g., CLAP, Whisper)"
+tags = ["audio", "spectrogram", "features", "mel"]
+examples = [
+    "Extract mel spectrogram for CLAP audio embedding",
+    "Generate audio features for classification model",
+    "Create time-frequency representation of audio"
+]
+idempotent = true
+side_effects = ["reads audio file", "performs FFT computation"]
+
+[[functions]]
+name = "video.extract_frames"
+description = "Extract frames from video at specified FPS and resolution for vision model input (e.g., CLIP)"
+tags = ["video", "frames", "extraction", "vision"]
+examples = [
+    "Extract 1 FPS frames at 336x336 for CLIP ViT-H/14",
+    "Sample video frames for video classification",
+    "Generate thumbnail sequence from video"
+]
+idempotent = true
+side_effects = ["writes image files", "invokes ffmpeg"]
+
+[[functions]]
+name = "media.capabilities"
+description = "Return organ capability card with all available functions and metadata"
+tags = ["metadata", "discovery", "mcp"]
+examples = [
+    "Discover available media preprocessing operations",
+    "Query organ capabilities for orchestration"
+]
+idempotent = true
+side_effects = []
