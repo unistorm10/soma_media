@@ -7,12 +7,15 @@ mod audio;
 mod video;
 mod image;
 mod ffmpeg;
+mod raw;
 mod organ;
+pub mod error;
 
 pub use audio::{AudioPreprocessor, AudioConfig, MelSpectrogram, AudioFormat};
 pub use video::{VideoPreprocessor, VideoConfig, VideoFrame};
 pub use image::{ImagePreprocessor, ImageConfig, ImageOutputFormat};
 pub use ffmpeg::{FfmpegCommand, FfmpegError};
+pub use raw::{RawProcessor, RawOptions, WhiteBalance, ColorSpace};
 
 // UMA interface exports
 pub use organ::{

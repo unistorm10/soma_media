@@ -10,6 +10,12 @@ rustfft = "6"  # For mel spectrogram generation
 ndarray = "0.15"  # Array operations for spectrograms
 image = "0.25"  # Image loading for video frames
 tracing = "0.1"
+rsraw = "0.1"  # LibRaw FFI for RAW image processing
+rsraw-sys = "0.1"  # LibRaw sys bindings for direct parameter access
+webp = "0.3"  # Direct libwebp FFI for fast WEBP encoding
+fast_image_resize = "4"  # SIMD-optimized image resizing (10x faster than image crate)
+infer = "0.16"  # Fast magic number-based file type detection
+tree_magic_mini = "3"  # MIME type detection from file bytes
 # UMA interface dependencies
 async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
