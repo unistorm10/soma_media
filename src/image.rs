@@ -149,13 +149,22 @@ impl ImagePreprocessor {
         if is_raw {
             // Use libraw FFI for all RAW formats
             if let Some(raw_proc) = &self.raw {
-                // Process from memory (file already read)
-                let rgb_data = raw_proc.process_raw_from_memory(&file_data, raw_options)
+                // Process from memory (file already read) - returns (data, width, height)
+                let (rgb_data, width, height) = raw_proc.process_raw_from_memory(&file_data, raw_options)
                     .map_err(|e| FfmpegError::ExecutionFailed(format!("libraw failed: {}", e)))?;
                 
-                // Get dimensions from memory
-                let (width, height) = raw_proc.get_dimensions_from_memory(&file_data, raw_options)
-                    .map_err(|e| FfmpegError::ExecutionFailed(format!("Failed to get dimensions: {}", e)))?;
+                // PPM writer already returns correctly interleaved RGB data
+                // Calculate target dimensions preserving aspect ratio
+                let src_aspect = width as f32 / height as f32;
+                let dst_aspect = self.config.width as f32 / self.config.height as f32;
+                
+                let (target_width, target_height) = if src_aspect > dst_aspect {
+                    // Source is wider - fit to width
+                    (self.config.width, (self.config.width as f32 / src_aspect) as u32)
+                } else {
+                    // Source is taller - fit to height
+                    ((self.config.height as f32 * src_aspect) as u32, self.config.height)
+                };
                 
                 // Fast SIMD resize using fast_image_resize
                 use fast_image_resize as fr;
@@ -169,8 +178,8 @@ impl ImagePreprocessor {
                 ).map_err(|e| FfmpegError::ExecutionFailed(format!("Failed to create source image: {:?}", e)))?;
                 
                 let mut dst_image = FrImage::new(
-                    self.config.width,
-                    self.config.height,
+                    target_width,
+                    target_height,
                     src_image.pixel_type(),
                 );
                 
@@ -184,7 +193,7 @@ impl ImagePreprocessor {
                 match self.config.format {
                     ImageOutputFormat::Webp => {
                         // Direct libwebp FFI encoding
-                        let encoder = webp::Encoder::from_rgb(&rgb_bytes, self.config.width, self.config.height);
+                        let encoder = webp::Encoder::from_rgb(&rgb_bytes, target_width, target_height);
                         let webp_data = encoder.encode(self.config.quality as f32);
                         
                         std::fs::write(output_path, &*webp_data)
@@ -193,7 +202,7 @@ impl ImagePreprocessor {
                     ImageOutputFormat::Jpeg | ImageOutputFormat::Png | ImageOutputFormat::Avif => {
                         // Fall back to image crate for other formats
                         // Recreate image from resized RGB bytes
-                        let img = image::RgbImage::from_raw(self.config.width, self.config.height, rgb_bytes.clone())
+                        let img = image::RgbImage::from_raw(target_width, target_height, rgb_bytes.clone())
                             .ok_or_else(|| FfmpegError::ExecutionFailed("Failed to create image from resized data".to_string()))?;
                         let dynamic_img = image::DynamicImage::ImageRgb8(img);
                         
