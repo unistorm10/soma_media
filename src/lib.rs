@@ -8,7 +8,7 @@ mod video;
 mod image;
 mod ffmpeg;
 mod raw;
-mod organ;
+pub mod organ;
 pub mod error;
 
 pub use audio::{AudioPreprocessor, AudioConfig, MelSpectrogram, AudioFormat};

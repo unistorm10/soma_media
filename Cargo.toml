@@ -3,6 +3,11 @@ name = "soma_media"
 version = "0.1.0"
 edition = "2021"
 
+# BODY organ daemon binary (independent UDS server)
+[[bin]]
+name = "soma_media"
+path = "src/bin/soma_media.rs"
+
 [dependencies]
 anyhow = "1"
 thiserror = "1"
@@ -16,11 +21,13 @@ webp = "0.3"  # Direct libwebp FFI for fast WEBP encoding
 fast_image_resize = "4"  # SIMD-optimized image resizing (10x faster than image crate)
 infer = "0.16"  # Fast magic number-based file type detection
 tree_magic_mini = "3"  # MIME type detection from file bytes
+clap = { version = "4.5", features = ["derive"] }  # CLI args for daemon
 # UMA interface dependencies
 async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread", "net", "io-util", "time"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 tempfile = "3"
