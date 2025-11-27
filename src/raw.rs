@@ -91,16 +91,16 @@ impl Default for RawOptions {
             bit_depth: 8,
             color_space: ColorSpace::SRGB,
             brightness: 1.0,
-            auto_brightness: false,
-            gamma: None, // Use default
+            auto_brightness: false,  // Respect photographer's intent by default
+            gamma: None, // Use libraw's default
             highlight_mode: 0,
             chromatic_aberration: None,
             noise_threshold: 0.0,
             median_filter_passes: 0,
             fbdd_noise_reduction: 0,
-            half_size: false,
+            half_size: true,  // Enable by default for speed
             four_color_rgb: false,
-            demosaic_algorithm: None,
+            demosaic_algorithm: Some(12),  // AAHD for best quality
         }
     }
 }
@@ -108,13 +108,14 @@ impl Default for RawOptions {
 impl RawOptions {
     /// Fast preview preset - optimized for speed
     /// Use for: Quick culling, thumbnail generation, preview rendering
+    /// No color/brightness adjustments - shows raw sensor data
     pub fn fast_preview() -> Self {
         Self {
-            white_balance: WhiteBalance::None, // No WB processing (fastest)
+            white_balance: WhiteBalance::None,
             bit_depth: 8,
             color_space: ColorSpace::SRGB,
             brightness: 1.0,
-            auto_brightness: false, // Manual brightness (faster)
+            auto_brightness: false,
             gamma: None,
             highlight_mode: 0, // Clip (fastest)
             chromatic_aberration: None,
@@ -123,36 +124,16 @@ impl RawOptions {
             fbdd_noise_reduction: 0,
             half_size: true, // 2x2 downsampling for speed
             four_color_rgb: false,
-            demosaic_algorithm: Some(12), // AAHD (8.1s, best quality)
-        }
-    }
-
-    /// ML training preset - balanced quality/speed for dataset preparation
-    /// Use for: Training data preprocessing, batch processing
-    pub fn ml_training() -> Self {
-        Self {
-            white_balance: WhiteBalance::Auto,
-            bit_depth: 8,
-            color_space: ColorSpace::SRGB,
-            brightness: 1.0,
-            auto_brightness: true,
-            gamma: Some((2.222, 4.5)), // sRGB gamma
-            highlight_mode: 1, // Unclip
-            chromatic_aberration: None,
-            noise_threshold: 100.0, // Light NR for cleaner training data
-            median_filter_passes: 0,
-            fbdd_noise_reduction: 1, // Light FBDD
-            half_size: false,
-            four_color_rgb: false,
             demosaic_algorithm: Some(12), // AAHD (best quality)
         }
     }
 
-    /// Professional quality preset - maximum quality for final delivery
-    /// Use for: Client deliverables, gallery prints, portfolio work
-    pub fn professional() -> Self {
+    /// Maximum quality preset - for final processing and archival
+    /// Use for: Client deliverables, prints, archival, reprocessing
+    /// Preserves all sensor data without adjustments but applies noise reduction
+    pub fn maximum() -> Self {
         Self {
-            white_balance: WhiteBalance::Camera,
+            white_balance: WhiteBalance::None, // Preserve sensor data
             bit_depth: 16,
             color_space: ColorSpace::ProPhotoRGB,
             brightness: 1.0,
@@ -160,54 +141,34 @@ impl RawOptions {
             gamma: None, // Linear for post-processing
             highlight_mode: 3, // Rebuild (best highlight recovery)
             chromatic_aberration: Some((1.0, 1.0)),
-            noise_threshold: 0.0, // No NR (preserve detail)
-            median_filter_passes: 0,
-            fbdd_noise_reduction: 0,
-            half_size: false,
+            noise_threshold: 100.0, // Light noise reduction
+            median_filter_passes: 1,
+            fbdd_noise_reduction: 2, // Full FBDD noise reduction
+            half_size: true, // Use half-size like fast_preview
             four_color_rgb: true, // Best color accuracy
             demosaic_algorithm: Some(12), // AAHD (best quality)
         }
     }
-
-    /// Web delivery preset - optimized for web/social media
-    /// Use for: Instagram, web galleries, email sharing
-    pub fn web_delivery() -> Self {
+    
+    /// Recovery preset - for severely under/overexposed images
+    /// Use for: Backlit subjects, silhouettes, blown highlights, deep shadows
+    /// Aggressive brightness adjustment and highlight/shadow recovery
+    pub fn recovery() -> Self {
         Self {
             white_balance: WhiteBalance::Auto,
             bit_depth: 8,
             color_space: ColorSpace::SRGB,
-            brightness: 1.1, // Slightly brighter for screens
+            brightness: 4.0, // Moderate boost
             auto_brightness: false,
-            gamma: Some((2.222, 4.5)), // sRGB gamma
-            highlight_mode: 2, // Blend
-            chromatic_aberration: Some((1.0, 1.0)),
-            noise_threshold: 100.0,
-            median_filter_passes: 1,
-            fbdd_noise_reduction: 2, // Full NR (looks better on web)
-            half_size: false,
-            four_color_rgb: false,
-            demosaic_algorithm: Some(12), // AAHD (best quality)
-        }
-    }
-
-    /// Archive preset - maximum fidelity for long-term storage
-    /// Use for: Master files, archival, future reprocessing
-    pub fn archive() -> Self {
-        Self {
-            white_balance: WhiteBalance::None, // Preserve sensor data
-            bit_depth: 16,
-            color_space: ColorSpace::Raw, // No color conversion
-            brightness: 1.0,
-            auto_brightness: false,
-            gamma: None, // Linear
-            highlight_mode: 0,
+            gamma: Some((1.2, 2.0)), // Very low power = aggressive shadow lift, low slope = gentle highlights
+            highlight_mode: 2, // Blend mode - better for already-blown highlights than rebuild
             chromatic_aberration: None,
-            noise_threshold: 0.0,
-            median_filter_passes: 0,
-            fbdd_noise_reduction: 0,
+            noise_threshold: 300.0,
+            median_filter_passes: 2,
+            fbdd_noise_reduction: 2,
             half_size: false,
-            four_color_rgb: false,
-            demosaic_algorithm: Some(12), // AAHD (best quality)
+            four_color_rgb: true,
+            demosaic_algorithm: Some(11),
         }
     }
 }
@@ -250,12 +211,12 @@ impl RawProcessor {
         RawImage::open(data).is_ok()
     }
     
-    /// Process RAW data from memory
+    /// Process RAW data from memory and return (RGB data, width, height)
     pub fn process_raw_from_memory(
         &self,
         file_data: &[u8],
         options: &RawOptions,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<(Vec<u8>, u32, u32)> {
         // Open RAW file from buffer
         let mut raw = RawImage::open(file_data)
             .map_err(|e| crate::error::MediaError::ProcessingError(
@@ -271,35 +232,44 @@ impl RawProcessor {
             let params = &mut (*raw_ptr).params;
             
             // White balance
-            match options.white_balance {
-                WhiteBalance::None => params.use_camera_wb = 0,
+            match &options.white_balance {
                 WhiteBalance::Camera => params.use_camera_wb = 1,
                 WhiteBalance::Auto => params.use_auto_wb = 1,
-                WhiteBalance::Custom(coeffs) => {
-                    params.user_mul[0] = coeffs[0];
-                    params.user_mul[1] = coeffs[1];
-                    params.user_mul[2] = coeffs[2];
-                    params.user_mul[3] = coeffs[3];
+                WhiteBalance::None => {
+                    params.use_camera_wb = 0;
+                    params.use_auto_wb = 0;
+                }
+                WhiteBalance::Custom(mults) => {
+                    params.use_camera_wb = 0;
+                    params.use_auto_wb = 0;
+                    params.user_mul = *mults;
                 }
             }
             
-            params.output_bps = options.bit_depth as i32;
-            params.output_color = options.color_space as i32;
-            params.bright = options.brightness;
+            // Auto brightness
             params.no_auto_bright = if options.auto_brightness { 0 } else { 1 };
-            
-            if let Some((gamma_power, toe_slope)) = options.gamma {
-                params.gamm[0] = (1.0 / gamma_power) as f64;
-                params.gamm[1] = toe_slope as f64;
+            if !options.auto_brightness {
+                params.bright = options.brightness;
             }
             
+            // Gamma curve
+            if let Some((power, slope)) = options.gamma {
+                params.gamm[0] = 1.0 / power as f64;
+                params.gamm[1] = slope as f64;
+            }
+            
+            // Highlight recovery
             params.highlight = options.highlight_mode as i32;
+            
+            // Noise reduction
             params.threshold = options.noise_threshold;
             params.med_passes = options.median_filter_passes as i32;
             params.fbdd_noiserd = options.fbdd_noise_reduction as i32;
-            params.half_size = if options.half_size { 1 } else { 0 };
-            params.four_color_rgb = if options.four_color_rgb { 1 } else { 0 };
             
+            // Half-size
+            params.half_size = if options.half_size { 1 } else { 0 };
+            
+            // Demosaic algorithm
             if let Some(algo) = options.demosaic_algorithm {
                 params.user_qual = algo as i32;
             }
@@ -310,50 +280,74 @@ impl RawProcessor {
                 format!("Failed to unpack RAW: {:?}", e)
             ))?;
         
-        let data = if options.bit_depth == 16 {
-            let processed = raw.process::<BIT_DEPTH_16>()
-                .map_err(|e| crate::error::MediaError::ProcessingError(
-                    format!("Failed to process RAW: {:?}", e)
-                ))?;
-            processed.iter()
-                .flat_map(|&v| v.to_le_bytes())
-                .collect()
-        } else {
-            let processed = raw.process::<BIT_DEPTH_8>()
-                .map_err(|e| crate::error::MediaError::ProcessingError(
-                    format!("Failed to process RAW: {:?}", e)
-                ))?;
-            processed.to_vec()
-        };
+        // Call dcraw_process to actually demosaic the image
+        unsafe {
+            let ret = sys::libraw_dcraw_process(raw_ptr);
+            if ret != 0 {
+                return Err(crate::error::MediaError::ProcessingError(
+                    format!("libraw_dcraw_process failed with code {}", ret)
+                ));
+            }
+        }
         
-        Ok(data)
-    }
-    
-    /// Get dimensions from RAW data in memory
-    pub fn get_dimensions_from_memory(&self, file_data: &[u8], options: &RawOptions) -> Result<(u32, u32)> {
-        let raw = RawImage::open(file_data)
-            .map_err(|e| crate::error::MediaError::ProcessingError(
-                format!("Failed to open RAW file: {:?}", e)
-            ))?;
-        
-        let raw_ptr: *const sys::libraw_data_t = unsafe {
-            std::mem::transmute_copy(&raw)
-        };
+        // Write to temp PPM file (dcraw_make_mem_image has wrong format)
+        let temp_ppm = std::env::temp_dir().join(format!("libraw_mem_{}.ppm", std::process::id()));
+        let c_path = std::ffi::CString::new(temp_ppm.to_str().unwrap()).unwrap();
         
         unsafe {
-            let sizes = &(*raw_ptr).sizes;
-            let width = if options.half_size {
-                sizes.iwidth as u32 / 2
-            } else {
-                sizes.iwidth as u32
-            };
-            let height = if options.half_size {
-                sizes.iheight as u32 / 2
-            } else {
-                sizes.iheight as u32
-            };
-            Ok((width, height))
+            let write_ret = sys::libraw_dcraw_ppm_tiff_writer(raw_ptr, c_path.as_ptr());
+            if write_ret != 0 {
+                return Err(crate::error::MediaError::ProcessingError(
+                    format!("libraw_dcraw_ppm_tiff_writer failed with code {}", write_ret)
+                ));
+            }
         }
+        
+        // Read the PPM file
+        let ppm_data = std::fs::read(&temp_ppm)
+            .map_err(|e| crate::error::MediaError::Io(e))?;
+        
+        // Clean up temp file
+        let _ = std::fs::remove_file(&temp_ppm);
+        
+        // Parse PPM header to get actual dimensions and find data start
+        // Format: P6\nWIDTH HEIGHT\n255\n
+        let header_str = String::from_utf8_lossy(&ppm_data[..100]);
+        let lines: Vec<&str> = header_str.lines().collect();
+        
+        if lines.len() < 3 || lines[0] != "P6" {
+            return Err(crate::error::MediaError::ProcessingError(
+                "Invalid PPM format".to_string()
+            ));
+        }
+        
+        // Parse width and height from second line
+        let dims: Vec<&str> = lines[1].split_whitespace().collect();
+        if dims.len() != 2 {
+            return Err(crate::error::MediaError::ProcessingError(
+                "Invalid PPM dimensions".to_string()
+            ));
+        }
+        
+        let width: u32 = dims[0].parse().map_err(|_| crate::error::MediaError::ProcessingError("Invalid width".to_string()))?;
+        let height: u32 = dims[1].parse().map_err(|_| crate::error::MediaError::ProcessingError("Invalid height".to_string()))?;
+        
+        // Calculate header end
+        let mut header_end = 0;
+        let mut newlines = 0;
+        for (i, &b) in ppm_data.iter().enumerate() {
+            if b == b'\n' {
+                newlines += 1;
+                if newlines == 3 {
+                    header_end = i + 1;
+                    break;
+                }
+            }
+        }
+        
+        let data = ppm_data[header_end..].to_vec();
+        
+        Ok((data, width, height))
     }
 
     /// Process a RAW file and return RGB image data
@@ -383,12 +377,8 @@ impl RawProcessor {
             
             // White balance
             match &options.white_balance {
-                WhiteBalance::Camera => {
-                    params.use_camera_wb = 1;
-                }
-                WhiteBalance::Auto => {
-                    params.use_auto_wb = 1;
-                }
+                WhiteBalance::Camera => params.use_camera_wb = 1,
+                WhiteBalance::Auto => params.use_auto_wb = 1,
                 WhiteBalance::None => {
                     params.use_camera_wb = 0;
                     params.use_auto_wb = 0;
@@ -400,10 +390,13 @@ impl RawProcessor {
                 }
             }
             
-            // Color space
-            params.output_color = options.color_space as i32;
+            // Auto brightness
+            params.no_auto_bright = if options.auto_brightness { 0 } else { 1 };
+            if !options.auto_brightness {
+                params.bright = options.brightness;
+            }
             
-            // Gamma
+            // Gamma curve
             if let Some((power, slope)) = options.gamma {
                 params.gamm[0] = 1.0 / power as f64;
                 params.gamm[1] = slope as f64;
@@ -412,30 +405,13 @@ impl RawProcessor {
             // Highlight recovery
             params.highlight = options.highlight_mode as i32;
             
-            // Chromatic aberration
-            if let Some((red, blue)) = options.chromatic_aberration {
-                params.aber[0] = red;
-                params.aber[2] = blue;
-            }
-            
             // Noise reduction
             params.threshold = options.noise_threshold;
             params.med_passes = options.median_filter_passes as i32;
             params.fbdd_noiserd = options.fbdd_noise_reduction as i32;
             
-            // Brightness
-            if options.auto_brightness {
-                params.no_auto_bright = 0;
-            } else {
-                params.no_auto_bright = 1;
-                params.bright = options.brightness;
-            }
-            
             // Half-size
             params.half_size = if options.half_size { 1 } else { 0 };
-            
-            // Four-color RGB
-            params.four_color_rgb = if options.four_color_rgb { 1 } else { 0 };
             
             // Demosaic algorithm
             if let Some(algo) = options.demosaic_algorithm {
@@ -449,23 +425,54 @@ impl RawProcessor {
                 format!("Failed to unpack RAW: {:?}", e)
             ))?;
         
-        // Process based on bit depth
-        let data = if options.bit_depth == 16 {
-            let processed = raw.process::<BIT_DEPTH_16>()
-                .map_err(|e| crate::error::MediaError::ProcessingError(
-                    format!("Failed to process RAW: {:?}", e)
-                ))?;
-            // Convert u16 slice to u8 bytes
-            processed.iter()
-                .flat_map(|&v| v.to_le_bytes())
-                .collect()
-        } else {
-            let processed = raw.process::<BIT_DEPTH_8>()
-                .map_err(|e| crate::error::MediaError::ProcessingError(
-                    format!("Failed to process RAW: {:?}", e)
-                ))?;
-            processed.to_vec()
-        };
+        // Call dcraw_process to actually demosaic the image
+        unsafe {
+            let ret = sys::libraw_dcraw_process(raw_ptr);
+            if ret != 0 {
+                return Err(crate::error::MediaError::ProcessingError(
+                    format!("libraw_dcraw_process failed with code {}", ret)
+                ));
+            }
+        }
+        
+        // Write to temp PPM file (dcraw_make_mem_image has wrong format)
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_ppm = std::env::temp_dir().join(format!("libraw_file_{}_{}.ppm", std::process::id(), timestamp));
+        let c_path = std::ffi::CString::new(temp_ppm.to_str().unwrap()).unwrap();
+        
+        unsafe {
+            let write_ret = sys::libraw_dcraw_ppm_tiff_writer(raw_ptr, c_path.as_ptr());
+            if write_ret != 0 {
+                return Err(crate::error::MediaError::ProcessingError(
+                    format!("libraw_dcraw_ppm_tiff_writer failed with code {}", write_ret)
+                ));
+            }
+        }
+        
+        // Read the PPM file
+        let ppm_data = std::fs::read(&temp_ppm)
+            .map_err(|e| crate::error::MediaError::Io(e))?;
+        
+        // Clean up temp file
+        let _ = std::fs::remove_file(&temp_ppm);
+        
+        // Skip PPM header (P6\nWIDTH HEIGHT\n255\n)
+        let mut header_end = 0;
+        let mut newlines = 0;
+        for (i, &b) in ppm_data.iter().enumerate() {
+            if b == b'\n' {
+                newlines += 1;
+                if newlines == 3 {
+                    header_end = i + 1;
+                    break;
+                }
+            }
+        }
+        
+        let data = ppm_data[header_end..].to_vec();
         
         Ok(data)
     }

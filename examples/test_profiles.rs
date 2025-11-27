@@ -2,26 +2,24 @@ use soma_media::{ImagePreprocessor, ImageConfig, ImageOutputFormat, RawOptions};
 use std::time::Instant;
 
 fn main() {
+    // 1024px on long side (3:2 aspect ratio like original)
     let config = ImageConfig {
-        width: 800,
-        height: 600,
+        width: 1024,
+        height: 683,
         format: ImageOutputFormat::Webp,
         quality: 85,
     };
     
     let processor = ImagePreprocessor::new(config);
     
-    let srw_input = "sample/07270143.SRW";
+    let srw_input = "sample/03240053.SRW";
     
     let profiles = vec![
         ("fast_preview", RawOptions::fast_preview()),
-        ("ml_training", RawOptions::ml_training()),
-        ("professional", RawOptions::professional()),
-        ("web_delivery", RawOptions::web_delivery()),
-        ("archive", RawOptions::archive()),
+        ("maximum", RawOptions::maximum()),
     ];
     
-    println!("Testing all RawOptions presets with AAHD:\n");
+    println!("Testing RawOptions presets @ 1024x683:\n");
     
     for (name, options) in profiles {
         let output = format!("/tmp/test_profile_{}.webp", name);
@@ -40,4 +38,8 @@ fn main() {
             }
         }
     }
+    
+    println!("\nOutputs saved to:");
+    println!("  /tmp/test_profile_fast_preview.webp");
+    println!("  /tmp/test_profile_maximum.webp");
 }
