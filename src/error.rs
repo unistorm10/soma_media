@@ -8,6 +8,9 @@ pub enum MediaError {
     #[error("Processing failed: {0}")]
     ProcessingError(String),
     
+    #[error("Validation failed: {0}")]
+    ValidationError(String),
+    
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     

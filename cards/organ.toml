@@ -7,8 +7,10 @@ version = "0.1.0"
 description = "FFmpeg-based audio/video preprocessing organ for media feature extraction and format conversion"
 division = "media"
 subsystem = "preprocessing"
-tags = ["media", "audio", "video", "ffmpeg", "preprocessing", "spectrogram", "frames"]
+tags = ["media", "audio", "video", "raw", "ffmpeg", "preprocessing", "spectrogram", "frames", "webp"]
+execution_modes = ["embedded", "sidecar", "server"]
 author = "SOMA Media Team"
+repository = "https://github.com/unistorm10/soma_media"
 
 # Audio preprocessing function
 [[functions]]
@@ -83,6 +85,69 @@ examples = [
 idempotent = true
 side_effects = ["writes image files", "invokes ffmpeg"]
 
+# Image preprocessing function
+[[functions]]
+name = "image.preprocess"
+description = "Preprocess image to specified format, dimensions, and quality (supports JPEG, PNG, WebP output)"
+tags = ["image", "preprocessing", "conversion", "resize"]
+examples = [
+    "Convert image to WebP at 336x336 for CLIP",
+    "Resize and convert to PNG for model input",
+    "Generate JPEG thumbnail at specified quality"
+]
+idempotent = true
+side_effects = ["writes image file"]
+
+[functions.input_schema]
+type = "object"
+required = ["input_path", "output_path"]
+
+[functions.input_schema.properties.input_path]
+type = "string"
+description = "Path to input image file"
+
+[functions.input_schema.properties.output_path]
+type = "string"
+description = "Path to output image file"
+
+[functions.input_schema.properties.width]
+type = "integer"
+description = "Target width in pixels (optional)"
+
+[functions.input_schema.properties.height]
+type = "integer"
+description = "Target height in pixels (optional)"
+
+[functions.input_schema.properties.format]
+type = "string"
+description = "Output format: 'jpeg', 'png', or 'webp' (default: 'jpeg')"
+
+[functions.input_schema.properties.quality]
+type = "integer"
+description = "Quality for lossy formats (1-100, default: 85)"
+
+[functions.output_schema]
+type = "object"
+
+[functions.output_schema.properties.processed]
+type = "boolean"
+
+[functions.output_schema.properties.output_path]
+type = "string"
+
+[functions.output_schema.properties.width]
+type = "integer"
+
+[functions.output_schema.properties.height]
+type = "integer"
+
+[functions.output_schema.properties.format]
+type = "string"
+
+[functions.output_schema.properties.quality]
+type = "integer"
+
+# Media capabilities function
 [[functions]]
 name = "media.capabilities"
 description = "Return organ capability card with all available functions and metadata"
@@ -93,3 +158,136 @@ examples = [
 ]
 idempotent = true
 side_effects = []
+
+# RAW image preview extraction
+[[functions]]
+name = "raw.preview"
+description = "Extract preview from RAW file and convert to WebP Q92 (uses embedded preview if available, generates from RAW otherwise)"
+tags = ["raw", "preview", "webp", "fast", "ml-ready"]
+examples = [
+    "Generate WebP preview for CLIP embedding",
+    "Extract camera preview for gallery thumbnail",
+    "Batch process RAW files for detection model"
+]
+idempotent = true
+side_effects = ["writes webp file"]
+
+[functions.input_schema]
+type = "object"
+required = ["input_path", "output_path"]
+
+[functions.input_schema.properties.input_path]
+type = "string"
+description = "Path to RAW image file (CR2, NEF, ARW, etc.)"
+
+[functions.input_schema.properties.output_path]
+type = "string"
+description = "Path to output WebP file"
+
+[functions.input_schema.properties.quality]
+type = "integer"
+description = "WebP quality (1-100, default: 92)"
+default = 92
+
+[functions.input_schema.properties.max_dimension]
+type = "integer"
+description = "Maximum width/height in pixels (optional, default: 2048)"
+
+[functions.input_schema.properties.force_raw_processing]
+type = "boolean"
+description = "Force RAW processing instead of using embedded preview (default: false)"
+default = false
+
+[functions.output_schema]
+type = "object"
+
+[functions.output_schema.properties.output_path]
+type = "string"
+
+[functions.output_schema.properties.format]
+type = "string"
+
+[functions.output_schema.properties.quality]
+type = "integer"
+
+[functions.output_schema.properties.size_bytes]
+type = "integer"
+
+[functions.output_schema.properties.processing_time_ms]
+type = "integer"
+
+[functions.output_schema.properties.method]
+type = "string"
+
+# RAW metadata extraction
+[[functions]]
+name = "raw.metadata"
+description = "Extract comprehensive metadata from RAW file (EXIF, camera settings, GPS, shooting parameters)"
+tags = ["raw", "metadata", "exif", "cataloging"]
+examples = [
+    "Extract camera make, model, and lens info",
+    "Get shooting parameters (ISO, aperture, shutter speed)",
+    "Retrieve GPS coordinates from RAW file"
+]
+idempotent = true
+side_effects = []
+
+[functions.input_schema]
+type = "object"
+required = ["input_path"]
+
+[functions.input_schema.properties.input_path]
+type = "string"
+description = "Path to RAW image file"
+
+[functions.output_schema]
+type = "object"
+description = "Comprehensive RAW file metadata"
+
+[functions.output_schema.properties.make]
+type = "string"
+description = "Camera manufacturer"
+
+[functions.output_schema.properties.model]
+type = "string"
+description = "Camera model"
+
+[functions.output_schema.properties.lens]
+type = "string"
+description = "Lens information (optional)"
+
+[functions.output_schema.properties.iso]
+type = "number"
+description = "ISO sensitivity"
+
+[functions.output_schema.properties.aperture]
+type = "number"
+description = "Aperture f-number"
+
+[functions.output_schema.properties.shutter_speed]
+type = "number"
+description = "Shutter speed in seconds"
+
+[functions.output_schema.properties.focal_length]
+type = "number"
+description = "Focal length in mm"
+
+[functions.output_schema.properties.width]
+type = "integer"
+description = "Image width in pixels"
+
+[functions.output_schema.properties.height]
+type = "integer"
+description = "Image height in pixels"
+
+[functions.output_schema.properties.timestamp]
+type = "integer"
+description = "Capture timestamp (Unix timestamp, optional)"
+
+[functions.output_schema.properties.gps]
+type = "object"
+description = "GPS coordinates (optional)"
+
+[functions.output_schema.properties.white_balance]
+type = "string"
+description = "White balance setting (optional)"

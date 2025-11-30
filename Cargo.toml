@@ -26,8 +26,15 @@ clap = { version = "4.5", features = ["derive"] }  # CLI args for daemon
 async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+chrono = "0.4"  # Timestamp parsing for RAW metadata
 tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread", "net", "io-util", "time"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Parallel CPU processing (used for CPU fallback)
+rayon = "1"
+
 [dev-dependencies]
 tempfile = "3"
+
+[features]
+default = []

@@ -1,4 +1,4 @@
-use soma_media::raw::{RawProcessor, RawOptions};
+use soma_media::{RawProcessor, RawOptions};
 
 fn main() {
     let processor = RawProcessor::new().unwrap();

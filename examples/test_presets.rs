@@ -14,10 +14,8 @@ fn main() {
     // Test all presets
     let presets = vec![
         ("Fast Preview", RawOptions::fast_preview(), "/tmp/srw_fast_preview.jpg"),
-        ("ML Training", RawOptions::ml_training(), "/tmp/srw_ml_training.jpg"),
-        ("Professional", RawOptions::professional(), "/tmp/srw_professional.jpg"),
-        ("Web Delivery", RawOptions::web_delivery(), "/tmp/srw_web_delivery.jpg"),
-        ("Archive", RawOptions::archive(), "/tmp/srw_archive.jpg"),
+        ("Maximum Quality", RawOptions::maximum(), "/tmp/srw_maximum.jpg"),
+        ("Recovery Mode", RawOptions::recovery(), "/tmp/srw_recovery.jpg"),
     ];
     
     for (name, options, output) in &presets {

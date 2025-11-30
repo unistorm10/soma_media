@@ -1,7 +1,7 @@
 //! Image preprocessing
 
 use crate::ffmpeg::{FfmpegCommand, FfmpegError};
-use crate::raw::{RawProcessor, RawOptions, WhiteBalance};
+use crate::raw::{RawProcessor, RawOptions};
 use std::path::Path;
 use image::{DynamicImage, ImageFormat};
 

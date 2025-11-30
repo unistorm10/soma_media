@@ -1,13 +1,57 @@
 //! UMA Organ Interface for soma_media
 //!
-//! Implements the Universal Module Architecture (UMA) interface for FFmpeg-based
-//! audio/video preprocessing, enabling dynamic discovery and invocation by SOMA orchestrators.
+//! Implements the Universal Module Architecture (UMA) interface for media preprocessing,
+//! enabling dynamic discovery and invocation by SOMA orchestrators.
+//!
+//! ## UMA Compliance
+//!
+//! - **Stimulus/Response Pattern**: All operations use standardized input/output
+//! - **Capability Cards**: Self-describing via MCP protocol
+//! - **Execution Modes**: Supports embedded, sidecar, and server modes
+//! - **Metrics**: Built-in latency tracking and error reporting
+//!
+//! ## Available Operations
+//!
+//! 1. `audio.preprocess` - Audio format conversion
+//! 2. `audio.mel_spectrogram` - Mel spectrogram generation
+//! 3. `video.extract_frames` - Video frame extraction
+//! 4. `image.preprocess` - Image format conversion/resize
+//! 5. `raw.preview` - Fast RAW preview extraction
+//! 6. `raw.metadata` - RAW metadata extraction
+//! 7. `media.capabilities` - Capability card query
+//!
+//! ## Example
+//!
+//! ```rust,no_run
+//! use soma_media::organ::{MediaOrgan, Organ, Stimulus};
+//! use serde_json::json;
+//! use std::collections::HashMap;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let organ = MediaOrgan::new();
+//!
+//! // Get capabilities
+//! let card = organ.describe();
+//! println!("Organ: {} v{}", card.name, card.version);
+//! println!("Functions: {}", card.functions.len());
+//!
+//! // Invoke operation
+//! let response = organ.stimulate(Stimulus {
+//!     op: "raw.preview".to_string(),
+//!     input: json!({"input_path": "photo.CR2", "output_path": "/tmp/preview.webp"}),
+//!     context: HashMap::new(),
+//! }).await?;
+//! # Ok(())
+//! # }
+//! ```
 
-use crate::{AudioPreprocessor, AudioConfig, AudioFormat, VideoPreprocessor, VideoConfig, ImagePreprocessor, ImageConfig, ImageOutputFormat, FfmpegError};
+use crate::{AudioPreprocessor, AudioConfig, AudioFormat, VideoPreprocessor, VideoConfig, ImagePreprocessor, ImageConfig, ImageOutputFormat, FfmpegError, RawProcessor, PreviewOptions};
+use crate::metrics::Metrics;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Instant;
 use thiserror::Error;
 
@@ -63,7 +107,12 @@ pub struct OrganCard {
     pub division: String,
     pub subsystem: String,
     pub tags: Vec<String>,
+    pub execution_modes: Vec<String>,
     pub functions: Vec<FunctionCard>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
 }
 
 /// Function capability card
@@ -80,11 +129,23 @@ pub struct FunctionCard {
 }
 
 /// Media Processing Organ
-pub struct MediaOrgan;
+pub struct MediaOrgan {
+    metrics: Arc<Metrics>,
+}
 
 impl MediaOrgan {
     pub fn new() -> Self {
-        Self
+        Self {
+            metrics: Metrics::new(),
+        }
+    }
+    
+    pub fn with_metrics(metrics: Arc<Metrics>) -> Self {
+        Self { metrics }
+    }
+    
+    pub fn metrics(&self) -> Arc<Metrics> {
+        Arc::clone(&self.metrics)
     }
     
     /// Handle audio.preprocess operation
@@ -214,6 +275,62 @@ impl MediaOrgan {
         let card = self.describe();
         serde_json::to_value(&card).map_err(OrganError::SerializationError)
     }
+    
+    /// Handle raw.preview operation - extract preview from RAW and convert to WebP
+    async fn handle_raw_preview(&self, input: Value) -> Result<Value, OrganError> {
+        let input_path = input["input_path"]
+            .as_str()
+            .ok_or_else(|| OrganError::InvalidInput("Missing input_path".to_string()))?;
+        let output_path = input["output_path"]
+            .as_str()
+            .ok_or_else(|| OrganError::InvalidInput("Missing output_path".to_string()))?;
+        
+        let quality = input["quality"].as_u64().unwrap_or(92) as u8;
+        let max_dimension = input["max_dimension"].as_u64().map(|v| v as u32);
+        let force_raw = input["force_raw_processing"].as_bool().unwrap_or(false);
+        
+        let processor = RawProcessor::new()
+            .map_err(|e| OrganError::ProcessingError(e.to_string()))?;
+        
+        let options = PreviewOptions {
+            quality,
+            max_dimension,
+            force_raw_processing: force_raw,
+        };
+        
+        let start = std::time::Instant::now();
+        let webp = processor.extract_preview_webp(std::path::Path::new(input_path), &options)
+            .map_err(|e| OrganError::ProcessingError(e.to_string()))?;
+        let elapsed = start.elapsed();
+        
+        std::fs::write(output_path, &webp)
+            .map_err(|e| OrganError::ProcessingError(format!("Failed to write WebP: {}", e)))?;
+        
+        Ok(json!({
+            "output_path": output_path,
+            "format": "webp",
+            "quality": quality,
+            "size_bytes": webp.len(),
+            "processing_time_ms": elapsed.as_millis(),
+            "method": if force_raw { "raw_processing" } else { "auto" },
+        }))
+    }
+    
+    /// Handle raw.metadata operation - extract metadata from RAW file
+    async fn handle_raw_metadata(&self, input: Value) -> Result<Value, OrganError> {
+        let input_path = input["input_path"]
+            .as_str()
+            .ok_or_else(|| OrganError::InvalidInput("Missing input_path".to_string()))?;
+        
+        let processor = RawProcessor::new()
+            .map_err(|e| OrganError::ProcessingError(e.to_string()))?;
+        
+        let metadata = processor.extract_metadata(std::path::Path::new(input_path))
+            .map_err(|e| OrganError::ProcessingError(e.to_string()))?;
+        
+        Ok(serde_json::to_value(&metadata)
+            .map_err(OrganError::SerializationError)?)
+    }
 }
 
 impl Default for MediaOrgan {
@@ -226,14 +343,25 @@ impl Default for MediaOrgan {
 impl Organ for MediaOrgan {
     async fn stimulate(&self, stimulus: Stimulus) -> Result<Response, OrganError> {
         let start = Instant::now();
+        let op = stimulus.op.clone();
         
         let result = match stimulus.op.as_str() {
             "audio.preprocess" => self.handle_audio_preprocess(stimulus.input).await?,
             "audio.mel_spectrogram" => self.handle_audio_mel_spectrogram(stimulus.input).await?,
             "video.extract_frames" => self.handle_video_extract_frames(stimulus.input).await?,
             "image.preprocess" => self.handle_image_preprocess(stimulus.input).await?,
+            "raw.preview" => self.handle_raw_preview(stimulus.input).await?,
+            "raw.metadata" => self.handle_raw_metadata(stimulus.input).await?,
             "media.capabilities" => self.handle_capabilities()?,
+            "metrics" => {
+                // Return current metrics
+                let snapshot = self.metrics.snapshot();
+                json!(snapshot)
+            }
             _ => {
+                let latency = start.elapsed().as_millis() as u64;
+                self.metrics.record_request(&op, false, latency);
+                
                 return Ok(Response {
                     ok: false,
                     output: json!({
@@ -244,19 +372,25 @@ impl Organ for MediaOrgan {
                             "audio.mel_spectrogram",
                             "video.extract_frames",
                             "image.preprocess",
-                            "media.capabilities"
+                            "raw.preview",
+                            "raw.metadata",
+                            "media.capabilities",
+                            "metrics"
                         ]
                     }),
-                    latency_ms: start.elapsed().as_millis() as u64,
+                    latency_ms: latency,
                     cost: None,
                 })
             }
         };
         
+        let latency = start.elapsed().as_millis() as u64;
+        self.metrics.record_request(&op, true, latency);
+        
         Ok(Response {
             ok: true,
             output: result,
-            latency_ms: start.elapsed().as_millis() as u64,
+            latency_ms: latency,
             cost: None,
         })
     }
@@ -272,11 +406,20 @@ impl Organ for MediaOrgan {
                 "media".to_string(),
                 "audio".to_string(),
                 "video".to_string(),
+                "raw".to_string(),
                 "ffmpeg".to_string(),
                 "preprocessing".to_string(),
                 "spectrogram".to_string(),
                 "frames".to_string(),
+                "webp".to_string(),
             ],
+            execution_modes: vec![
+                "embedded".to_string(),
+                "sidecar".to_string(),
+                "server".to_string(),
+            ],
+            author: Some("SOMA Media Team".to_string()),
+            repository: Some("https://github.com/unistorm10/soma_media".to_string()),
             functions: vec![
                 FunctionCard {
                     name: "audio.preprocess".to_string(),

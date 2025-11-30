@@ -44,6 +44,9 @@ async fn main() -> Result<()> {
     info!("🎬 Starting SOMA Media Daemon");
     info!("   Socket: {}", args.socket_path);
 
+    // Track startup time for health checks
+    let start_time = std::time::Instant::now();
+
     // Create media organ instance
     let organ = Arc::new(MediaOrgan::new());
     
@@ -80,7 +83,7 @@ async fn main() -> Result<()> {
             Ok((stream, _addr)) => {
                 let organ = Arc::clone(&organ);
                 tokio::spawn(async move {
-                    if let Err(e) = handle_connection(stream, organ).await {
+                    if let Err(e) = handle_connection(stream, organ, start_time).await {
                         error!("Connection error: {}", e);
                     }
                 });
@@ -93,7 +96,11 @@ async fn main() -> Result<()> {
 }
 
 /// Handle a single UDS connection
-async fn handle_connection(mut stream: UnixStream, organ: Arc<MediaOrgan>) -> Result<()> {
+async fn handle_connection(
+    mut stream: UnixStream, 
+    organ: Arc<MediaOrgan>,
+    start_time: std::time::Instant,
+) -> Result<()> {
     let mut buffer = vec![0u8; 65536]; // 64KB buffer
 
     loop {
@@ -122,18 +129,33 @@ async fn handle_connection(mut stream: UnixStream, organ: Arc<MediaOrgan>) -> Re
 
         debug!("Received: op={}", stimulus.op);
 
-        // Process via Organ trait
-        let response = match organ.stimulate(stimulus).await {
-            Ok(resp) => resp,
-            Err(e) => {
-                error!("Stimulate error: {:?}", e);
-                Response {
-                    ok: false,
-                    output: serde_json::json!({
-                        "error": format!("{:?}", e)
-                    }),
-                    latency_ms: 0,
-                    cost: None,
+        // Handle health check specially (no organ processing needed)
+        let response = if stimulus.op == "health" || stimulus.op == "health.check" {
+            Response {
+                ok: true,
+                output: serde_json::json!({
+                    "status": "healthy",
+                    "organ": "soma_media",
+                    "version": env!("CARGO_PKG_VERSION"),
+                    "uptime_ms": start_time.elapsed().as_millis() as u64,
+                }),
+                latency_ms: 0,
+                cost: None,
+            }
+        } else {
+            // Process via Organ trait
+            match organ.stimulate(stimulus).await {
+                Ok(resp) => resp,
+                Err(e) => {
+                    error!("Stimulate error: {:?}", e);
+                    Response {
+                        ok: false,
+                        output: serde_json::json!({
+                            "error": format!("{:?}", e)
+                        }),
+                        latency_ms: 0,
+                        cost: None,
+                    }
                 }
             }
         };
