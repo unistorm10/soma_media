@@ -3,7 +3,6 @@
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use serde_json;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

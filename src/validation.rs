@@ -1,5 +1,7 @@
 //! Input validation against JSON schemas
 
+#![allow(dead_code)]  // Utility functions for future use
+
 use crate::error::MediaError;
 use serde_json::Value;
 
@@ -13,7 +15,7 @@ pub fn validate_input(input: &Value, schema: &Value) -> Result<()> {
             let field_str = field_name.as_str()
                 .ok_or_else(|| MediaError::ValidationError("Invalid schema: required field not a string".to_string()))?;
             
-            if !input.get(field_str).is_some() {
+            if input.get(field_str).is_none() {
                 return Err(MediaError::ValidationError(
                     format!("Missing required field: {}", field_str)
                 ));

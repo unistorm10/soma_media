@@ -180,7 +180,7 @@ impl ParallelDemosaic {
     /// * `white_level` - White level (saturation point)
     /// 
     /// # Returns
-    /// RGB data as Vec<u8> (3 bytes per pixel)
+    /// RGB data as `Vec<u8>` (3 bytes per pixel)
     pub fn demosaic(
         &self,
         bayer_data: &[u16],
@@ -191,8 +191,8 @@ impl ParallelDemosaic {
         white_level: u16,
     ) -> Vec<u8> {
         // Calculate number of tiles
-        let tiles_x = (width + self.tile_size - 1) / self.tile_size;
-        let tiles_y = (height + self.tile_size - 1) / self.tile_size;
+        let tiles_x = width.div_ceil(self.tile_size);
+        let tiles_y = height.div_ceil(self.tile_size);
         
         tracing::debug!(
             "Parallel demosaic: {}x{} -> {}x{} tiles ({}px + {}px overlap)",
@@ -297,6 +297,7 @@ impl ParallelDemosaic {
     }
     
     /// Bilinear demosaic (fast, reasonable quality)
+    #[allow(clippy::too_many_arguments)]
     fn demosaic_bilinear(
         &self,
         bayer: &[u16],
@@ -393,10 +394,11 @@ impl ParallelDemosaic {
         
         for tile in tiles {
             // Calculate valid region (excluding overlap zones for blending)
-            let inner_x = tile.x + tile.overlap;
-            let inner_y = tile.y + tile.overlap;
-            let inner_w = tile.width.saturating_sub(tile.overlap * 2);
-            let inner_h = tile.height.saturating_sub(tile.overlap * 2);
+            // These could be used for more advanced blending in the future
+            let _inner_x = tile.x + tile.overlap;
+            let _inner_y = tile.y + tile.overlap;
+            let _inner_w = tile.width.saturating_sub(tile.overlap * 2);
+            let _inner_h = tile.height.saturating_sub(tile.overlap * 2);
             
             for ty in 0..tile.height {
                 for tx in 0..tile.width {

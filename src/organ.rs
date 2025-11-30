@@ -328,8 +328,8 @@ impl MediaOrgan {
         let metadata = processor.extract_metadata(std::path::Path::new(input_path))
             .map_err(|e| OrganError::ProcessingError(e.to_string()))?;
         
-        Ok(serde_json::to_value(&metadata)
-            .map_err(OrganError::SerializationError)?)
+        serde_json::to_value(&metadata)
+            .map_err(OrganError::SerializationError)
     }
 }
 

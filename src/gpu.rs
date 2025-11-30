@@ -335,14 +335,14 @@ impl GpuProcessor {
         
         // Build LUT for speed
         let mut lut = vec![0u8; 256];
-        for i in 0..256 {
+        for (i, lut_entry) in lut.iter_mut().enumerate() {
             let normalized = i as f32 / 255.0;
             let gamma_corrected = if normalized < slope {
                 normalized / slope
             } else {
                 ((normalized + (power - 1.0) * slope) / power).powf(power)
             };
-            lut[i] = (gamma_corrected * 255.0).clamp(0.0, 255.0) as u8;
+            *lut_entry = (gamma_corrected * 255.0).clamp(0.0, 255.0) as u8;
         }
         
         // Apply LUT in parallel

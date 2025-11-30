@@ -1,5 +1,7 @@
 //! Metrics and observability for soma_media
 
+#![allow(dead_code)]  // Timer and counters for future observability
+
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;

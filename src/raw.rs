@@ -392,7 +392,7 @@ impl RawProcessor {
             let p50_threshold = total_pixels as u32 / 2;  // Median
             
             let mut p1 = 0usize;
-            let mut p99 = 255usize;
+            let mut _p99 = 255usize;  // Could be used for highlight protection
             let mut p50 = 128usize;
             
             for (i, &count) in histogram.iter().enumerate() {
@@ -404,7 +404,7 @@ impl RawProcessor {
                     p50 = i;
                 }
                 if cumulative >= p99_threshold {
-                    p99 = i;
+                    _p99 = i;
                     break;
                 }
             }
@@ -421,7 +421,7 @@ impl RawProcessor {
             let ev_adjustment = (target_median / current_median).log2();
             
             // Clamp to reasonable range (-2 to +3 EV)
-            let clamped_ev = ev_adjustment.max(-2.0).min(3.0);
+            let clamped_ev = ev_adjustment.clamp(-2.0, 3.0);
             
             // Only apply if the adjustment is significant (> 0.3 EV)
             if clamped_ev.abs() > 0.3 {
@@ -610,7 +610,7 @@ impl RawProcessor {
         
         // Read the PPM file
         let ppm_data = std::fs::read(&temp_ppm)
-            .map_err(|e| crate::error::MediaError::Io(e))?;
+            .map_err(crate::error::MediaError::Io)?;
         
         // Clean up temp file
         let _ = std::fs::remove_file(&temp_ppm);
@@ -663,7 +663,7 @@ impl RawProcessor {
     ) -> Result<Vec<u8>> {
         // Read file into memory
         let file_data = std::fs::read(input_path)
-            .map_err(|e| crate::error::MediaError::Io(e))?;
+            .map_err(crate::error::MediaError::Io)?;
         
         // Open RAW file from buffer
         let mut raw = RawImage::open(&file_data)
@@ -687,10 +687,8 @@ impl RawProcessor {
                 ))?;
                 let auto_ev = self.calculate_auto_exposure(raw_ptr);
                 Some(2.0_f32.powf(auto_ev))
-            } else if let Some(ev) = options.exposure_compensation {
-                Some(2.0_f32.powf(ev))
             } else {
-                None
+                options.exposure_compensation.map(|ev| 2.0_f32.powf(ev))
             };
             
             // White balance
@@ -829,7 +827,7 @@ impl RawProcessor {
         
         // Read the PPM file
         let ppm_data = std::fs::read(&temp_ppm)
-            .map_err(|e| crate::error::MediaError::Io(e))?;
+            .map_err(crate::error::MediaError::Io)?;
         
         // Clean up temp file
         let _ = std::fs::remove_file(&temp_ppm);
@@ -855,7 +853,7 @@ impl RawProcessor {
     /// Get image dimensions from RAW file (accounting for half_size mode)
     pub fn get_dimensions(&self, path: &Path, options: &RawOptions) -> Result<(u32, u32)> {
         let file_data = std::fs::read(path)
-            .map_err(|e| crate::error::MediaError::Io(e))?;
+            .map_err(crate::error::MediaError::Io)?;
             
         let raw = RawImage::open(&file_data)
             .map_err(|e| crate::error::MediaError::ProcessingError(
@@ -986,7 +984,7 @@ impl RawProcessor {
     /// This is much faster than processing the full RAW data.
     fn extract_embedded_preview(&self, path: &Path) -> Result<DynamicImage> {
         let file_data = std::fs::read(path)
-            .map_err(|e| crate::error::MediaError::Io(e))?;
+            .map_err(crate::error::MediaError::Io)?;
             
         let raw = RawImage::open(&file_data)
             .map_err(|e| crate::error::MediaError::ProcessingError(
@@ -1024,7 +1022,7 @@ impl RawProcessor {
                 ))?;
                 
                 // Apply EXIF orientation correction
-                return Ok(self.apply_exif_orientation(img, path)?);
+                return self.apply_exif_orientation(img, path);
             }
         }
         
@@ -1042,7 +1040,7 @@ impl RawProcessor {
     /// 8 = Rotate 270 CW (90 CCW)
     fn apply_exif_orientation(&self, img: DynamicImage, path: &Path) -> Result<DynamicImage> {
         let file_data = std::fs::read(path)
-            .map_err(|e| crate::error::MediaError::Io(e))?;
+            .map_err(crate::error::MediaError::Io)?;
             
         let raw = RawImage::open(&file_data)
             .map_err(|e| crate::error::MediaError::ProcessingError(
@@ -1078,7 +1076,7 @@ impl RawProcessor {
     fn generate_preview_from_raw(&self, path: &Path) -> Result<DynamicImage> {
         let opts = RawOptions::fast_preview();  // Uses half_size = true
         let file_data = std::fs::read(path)
-            .map_err(|e| crate::error::MediaError::Io(e))?;
+            .map_err(crate::error::MediaError::Io)?;
             
         let (rgb, width, height) = self.process_raw_from_memory(&file_data, &opts)?;
         
@@ -1124,7 +1122,7 @@ impl RawProcessor {
     /// using LibRaw's FFI interface.
     pub fn extract_metadata(&self, path: &Path) -> Result<RawMetadata> {
         let file_data = std::fs::read(path)
-            .map_err(|e| crate::error::MediaError::Io(e))?;
+            .map_err(crate::error::MediaError::Io)?;
             
         let raw = RawImage::open(&file_data)
             .map_err(|e| crate::error::MediaError::ProcessingError(
@@ -1477,13 +1475,13 @@ impl RawProcessor {
             ))?;
             
             let sizes = &(*raw_ptr).sizes;
-            let width = sizes.width as u32;
-            let height = sizes.height as u32;
+            let _width = sizes.width as u32;
+            let _height = sizes.height as u32;
             let raw_width = sizes.raw_width as usize;
             
             // Get Bayer pattern
             let color = &(*raw_ptr).idata.cdesc;
-            let pattern = BayerPattern::from_cdesc(color) as u8;
+            let _pattern = BayerPattern::from_cdesc(color) as u8;
             
             // Get raw image data
             let raw_data_ptr = (*raw_ptr).rawdata.raw_image;
@@ -1493,8 +1491,8 @@ impl RawProcessor {
                 ));
             }
             
-            let total_pixels = raw_width * height as usize;
-            let bayer_data: Vec<u16> = std::slice::from_raw_parts(raw_data_ptr, total_pixels)
+            let total_pixels = raw_width * _height as usize;
+            let _bayer_data: Vec<u16> = std::slice::from_raw_parts(raw_data_ptr, total_pixels)
                 .to_vec();
             
             // Try GPU demosaic via soma_compute
