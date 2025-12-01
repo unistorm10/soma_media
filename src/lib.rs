@@ -131,6 +131,9 @@ pub mod demosaic;
 // RAW metadata extraction
 pub mod metadata;
 
+// Camera color profiles (MakerNotes-based)
+pub mod profiles;
+
 pub mod organ;
 pub mod error;
 
@@ -149,6 +152,12 @@ pub use metadata::{
     detect_mime_from_extension,
     GpsCoordinates, LensInfo, ExposureInfo, ColorInfo, Dimensions,
     SensorInfo, ShootingInfo, MetadataBackend,
+};
+
+// Camera color profiles (extract from MakerNotes, apply to match in-camera JPEG)
+pub use profiles::{
+    CameraProfile, extract_camera_profile,
+    ColorMatrix, WbMultipliers, ToneCurve, PictureStyle,
 };
 
 // GPU acceleration via soma_compute UMA (always available, falls back to CPU)
