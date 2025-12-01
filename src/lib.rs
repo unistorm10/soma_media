@@ -128,6 +128,9 @@ pub mod gpu;
 // Parallel demosaic for RAW processing
 pub mod demosaic;
 
+// RAW metadata extraction
+pub mod metadata;
+
 pub mod organ;
 pub mod error;
 
@@ -137,7 +140,16 @@ pub use audio::{AudioPreprocessor, AudioConfig, MelSpectrogram, AudioFormat};
 pub use video::{VideoPreprocessor, VideoConfig, VideoFrame};
 pub use image::{ImagePreprocessor, ImageConfig, ImageOutputFormat};
 pub use ffmpeg::{FfmpegCommand, FfmpegError};
-pub use raw::{RawProcessor, RawOptions, WhiteBalance, ColorSpace, PreviewOptions, RawMetadata, GpsCoordinates};
+pub use raw::{RawProcessor, RawOptions, WhiteBalance, ColorSpace, PreviewOptions};
+
+// Universal metadata extraction (ExifTool + fallbacks)
+pub use metadata::{
+    MediaMetadata, RawMetadata,  // RawMetadata is alias for backward compatibility
+    extract_metadata, exiftool_available, ffprobe_available,
+    detect_mime_from_extension,
+    GpsCoordinates, LensInfo, ExposureInfo, ColorInfo, Dimensions,
+    SensorInfo, ShootingInfo, MetadataBackend,
+};
 
 // GPU acceleration via soma_compute UMA (always available, falls back to CPU)
 pub use gpu::{GpuProcessor, GpuBackend};

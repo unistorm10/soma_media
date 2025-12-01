@@ -41,8 +41,8 @@
 //! ```
 
 use crate::error::Result;
+use crate::metadata::RawMetadata;
 use std::path::Path;
-use std::collections::HashMap;
 use rsraw::RawImage;
 use rsraw_sys as sys;
 use image::{DynamicImage, GenericImageView};
@@ -896,57 +896,6 @@ impl Default for PreviewOptions {
     }
 }
 
-/// GPS coordinates from EXIF data
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct GpsCoordinates {
-    pub latitude: f64,
-    pub longitude: f64,
-    pub altitude: Option<f64>,
-}
-
-/// RAW file metadata extracted from EXIF and LibRaw
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct RawMetadata {
-    /// Camera make (e.g., "Canon", "Nikon")
-    pub make: String,
-    
-    /// Camera model (e.g., "Canon EOS R5")
-    pub model: String,
-    
-    /// Lens information
-    pub lens: Option<String>,
-    
-    /// ISO sensitivity
-    pub iso: f32,
-    
-    /// Aperture (f-number)
-    pub aperture: f32,
-    
-    /// Shutter speed in seconds
-    pub shutter_speed: f32,
-    
-    /// Focal length in mm
-    pub focal_length: f32,
-    
-    /// Image width in pixels
-    pub width: u32,
-    
-    /// Image height in pixels
-    pub height: u32,
-    
-    /// Capture timestamp (Unix timestamp)
-    pub timestamp: Option<i64>,
-    
-    /// GPS coordinates
-    pub gps: Option<GpsCoordinates>,
-    
-    /// White balance as set in camera
-    pub white_balance: Option<String>,
-    
-    /// Additional metadata as key-value pairs
-    pub extra: HashMap<String, String>,
-}
-
 
 impl RawProcessor {
     /// Extract preview from RAW file and convert to WebP
@@ -1118,89 +1067,18 @@ impl RawProcessor {
     
     /// Extract comprehensive metadata from RAW file
     /// 
-    /// Extracts EXIF data, camera settings, GPS coordinates, and other metadata
-    /// using LibRaw's FFI interface.
+    /// Extracts EXIF data, camera settings, lens info, GPS coordinates, 
+    /// sensor data, and manufacturer-specific makernotes.
+    /// 
+    /// See [`crate::metadata::extract_metadata`] for the standalone function.
     pub fn extract_metadata(&self, path: &Path) -> Result<RawMetadata> {
-        let file_data = std::fs::read(path)
-            .map_err(crate::error::MediaError::Io)?;
-            
-        let raw = RawImage::open(&file_data)
-            .map_err(|e| crate::error::MediaError::ProcessingError(
-                format!("Failed to open RAW file: {:?}", e)
-            ))?;
-        
-        let raw_ptr: *mut sys::libraw_data_t = unsafe {
-            std::mem::transmute_copy(&raw)
-        };
-        
-        unsafe {
-            let idata = &(*raw_ptr).idata;
-            let other = &(*raw_ptr).other;
-            let sizes = &(*raw_ptr).sizes;
-            
-            // Extract camera make and model
-            let make = std::ffi::CStr::from_ptr(idata.make.as_ptr())
-                .to_string_lossy()
-                .to_string();
-            let model = std::ffi::CStr::from_ptr(idata.model.as_ptr())
-                .to_string_lossy()
-                .to_string();
-            
-            // Lens info is not directly available in libraw_iparams_t
-            // It may be in lens_make/lens_model fields in other structs
-            let lens = None;
-            
-            // Extract shooting parameters
-            let iso = other.iso_speed;
-            let aperture = other.aperture;
-            let shutter_speed = other.shutter;
-            let focal_length = other.focal_len;
-            
-            // Extract image dimensions
-            let width = sizes.width as u32;
-            let height = sizes.height as u32;
-            
-            // Extract timestamp
-            let timestamp = if other.timestamp > 0 {
-                Some(other.timestamp as i64)
-            } else {
-                None
-            };
-            
-            // GPS data (if available in other fields)
-            let gps = None; // LibRaw doesn't directly expose GPS in basic struct
-            
-            // White balance description - using available fields
-            let white_balance = None;
-            
-            // Additional metadata
-            let mut extra = HashMap::new();
-            extra.insert("raw_count".to_string(), idata.raw_count.to_string());
-            extra.insert("filters".to_string(), idata.filters.to_string());
-            extra.insert("colors".to_string(), idata.colors.to_string());
-            
-            Ok(RawMetadata {
-                make,
-                model,
-                lens,
-                iso,
-                aperture,
-                shutter_speed,
-                focal_length,
-                width,
-                height,
-                timestamp,
-                gps,
-                white_balance,
-                extra,
-            })
-        }
+        crate::metadata::extract_metadata(path)
+            .map_err(|e| crate::error::MediaError::ProcessingError(e.to_string()))
     }
     
     /// Extract preview with GPU acceleration (via soma_compute UMA)
     /// 
     /// Automatically uses best available backend:
-    /// - soma_compute GPU (via UMA) - coordinated with ML inference
     /// - CPU (SIMD via rayon) - automatic fallback
     /// 
     /// This is faster than extract_preview_webp() when resize is needed.

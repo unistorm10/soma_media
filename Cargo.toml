@@ -30,6 +30,9 @@ chrono = "0.4"  # Timestamp parsing for RAW metadata
 tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread", "net", "io-util", "time"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# EXIF metadata extraction (pure Rust fallback)
+kamadak-exif = "0.6"  # Pure Rust EXIF parsing (aliased as `exif`)
+
 # Parallel CPU processing (used for CPU fallback)
 rayon = "1"
 
